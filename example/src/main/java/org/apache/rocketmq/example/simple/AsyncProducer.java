@@ -17,6 +17,7 @@
 package org.apache.rocketmq.example.simple;
 
 import java.io.UnsupportedEncodingException;
+
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendCallback;
@@ -28,16 +29,22 @@ public class AsyncProducer {
     public static void main(String[] args) throws MQClientException, InterruptedException, UnsupportedEncodingException {
 
         DefaultMQProducer producer = new DefaultMQProducer("Jodie_Daily_test");
+
+        producer.setNamesrvAddr("127.0.0.1:9876");
+        producer.setInstanceName("Producer");
+
         producer.start();
         producer.setRetryTimesWhenSendAsyncFailed(0);
 
-        for (int i = 0; i < 10000000; i++) {
+        for (int i = 0; i < 100; i++) {
             try {
                 final int index = i;
+                String msgTmp = "hello" + i;
+
                 Message msg = new Message("Jodie_topic_1023",
-                    "TagA",
-                    "OrderID188",
-                    "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
+                        "TagA",
+                        "OrderID188",
+                        msgTmp.getBytes(RemotingHelper.DEFAULT_CHARSET));
                 producer.send(msg, new SendCallback() {
                     @Override
                     public void onSuccess(SendResult sendResult) {
@@ -47,13 +54,24 @@ public class AsyncProducer {
                     @Override
                     public void onException(Throwable e) {
                         System.out.printf("%-10d Exception %s %n", index, e);
-                        e.printStackTrace();
+//                        e.printStackTrace();
                     }
                 });
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
-        producer.shutdown();
+
+//        producer.shutdown();
+
+        while(true){
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
+
+
 }

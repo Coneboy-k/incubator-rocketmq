@@ -38,7 +38,10 @@ public abstract class ServiceThread implements Runnable {
      * 等待标识
      */
     protected final CountDownLatch2 waitPoint = new CountDownLatch2(1);
-    // TODO 疑问：这个变量的用途没看懂？
+
+    /**
+     *  操作把比较和赋值操作组成了一个原子操作，这样就去除boolean的赋值线程安全的操作
+     */
     protected volatile AtomicBoolean hasNotified = new AtomicBoolean(false);
     /**
      * 是否停止

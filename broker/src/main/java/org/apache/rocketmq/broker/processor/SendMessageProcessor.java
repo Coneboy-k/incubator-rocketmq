@@ -55,6 +55,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         super(brokerController);
     }
 
+    /**
+     * 处理消息请求
+     */
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws RemotingCommandException {
         SendMessageContext mqtraceContext;
@@ -376,7 +379,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             }
         }
 
-        // 添加消息
+        // 添加消息--我理解的是保存消息
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         if (putMessageResult != null) {
             boolean sendOK = false;

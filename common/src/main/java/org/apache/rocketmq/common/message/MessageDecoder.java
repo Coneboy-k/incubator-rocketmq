@@ -59,12 +59,14 @@ public class MessageDecoder {
      * @return Message编号
      */
     public static String createMessageId(final ByteBuffer input, final ByteBuffer addr, final long offset) {
+        // 准备写入
         input.flip();
-        input.limit(MessageDecoder.MSG_ID_LENGTH);
+        input.limit(MessageDecoder.MSG_ID_LENGTH); // 一共是16位长度
 
+        // 写入数据流，最后写一个long进去
         input.put(addr);
         input.putLong(offset);
-
+        // 生成地址
         return UtilAll.bytes2string(input.array());
     }
 

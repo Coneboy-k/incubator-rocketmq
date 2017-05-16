@@ -27,18 +27,22 @@ public class Producer {
 
         DefaultMQProducer producer = new DefaultMQProducer("ProducerGroupName");
 
+        producer.setNamesrvAddr("127.0.0.1:9876");
+        producer.setInstanceName("Producer");
+
         producer.start();
 
-        for (int i = 0; i < 10000000; i++)
+        for (int i = 0; i <1; i++)
             try {
-                {
-                    Message msg = new Message("TopicTest",
-                        "TagA",
+
+                String  msgTmp = "hello" + i;
+
+                Message msg = new Message("TopicTest222222222",
+                        "Tag3",
                         "OrderID188",
-                        "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
-                    SendResult sendResult = producer.send(msg);
-                    System.out.printf("%s%n", sendResult);
-                }
+                        msgTmp.getBytes(RemotingHelper.DEFAULT_CHARSET));
+                SendResult sendResult = producer.send(msg);
+                System.out.printf("%s%n", sendResult);
 
             } catch (Exception e) {
                 e.printStackTrace();

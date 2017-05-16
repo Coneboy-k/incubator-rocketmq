@@ -41,33 +41,42 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 映射文件
+ * 对应一个持久化文件
+ *
+ * RMQ的文件存储中，最终对应内存和文件映射的类是MapedFile这个类，
+ * 而这个类完成内存和文件的映射主要是通过Java NIO包下 FileChannel 所提供的map方法来完成，
+ *
  */
 public class MappedFile extends ReferenceResource {
 
     protected static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
     /**
-     * TODO
+     *  pagecount 一般都是4k的倍数所以这么定义
      */
     public static final int OS_PAGE_SIZE = 1024 * 4;
+
     /**
      * 映射虚拟内存总字节数
      */
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);
+
     /**
      * 映射文件总数
      */
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
+
     /**
      * 当前写入位置，下次开始写入的开始位置
      */
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
+
     /**
      * ADD BY ChenYang
      * 当前commit位置
      */
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
+
     /**
      * 当前flush位置
      */
@@ -76,16 +85,19 @@ public class MappedFile extends ReferenceResource {
      * 文件大小
      */
     protected int fileSize;
+
     /**
      * fileChannel
      * {@link #file}的channel = new RandomAccessFile(this.file, "rw").getChannel()
      */
     protected FileChannel fileChannel;
+
     /**
      * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
      * 写入缓冲
      */
     protected ByteBuffer writeBuffer = null;
+
     /**
      * writeBuffer缓存池
      */
@@ -124,6 +136,9 @@ public class MappedFile extends ReferenceResource {
         init(fileName, fileSize);
     }
 
+    /**
+     * 构造方法
+     */
     public MappedFile(final String fileName, final int fileSize, final TransientStorePool transientStorePool) throws IOException {
         init(fileName, fileSize, transientStorePool);
     }
@@ -198,6 +213,9 @@ public class MappedFile extends ReferenceResource {
         return TOTAL_MAPPED_VIRTUAL_MEMORY.get();
     }
 
+    /**
+     *  1.初始化方法
+     */
     public void init(final String fileName, final int fileSize, final TransientStorePool transientStorePool) throws IOException {
         init(fileName, fileSize);
         this.writeBuffer = transientStorePool.borrowBuffer();
@@ -205,24 +223,29 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 初始化fileChannel、mappedByteBuffer
+     *  2. 初始化fileChannel、mappedByteBuffer  核心启动地方
      * @param fileName 文件名
      * @param fileSize 文件大小
      * @throws IOException 文件不存在 or io异常
      */
     private void init(final String fileName, final int fileSize) throws IOException {
+
         this.fileName = fileName;
         this.fileSize = fileSize;
         this.file = new File(fileName);
         this.fileFromOffset = Long.parseLong(this.file.getName());
         boolean ok = false;
-
+        // 确保文件ok，没有文件夹就创建
         ensureDirOK(this.file.getParent());
 
         try {
+            // nio 开启映射
             this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
+            // 映射文件的大小，也是这个文件最大的大小
             this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
+            // 更新映射大小
             TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);
+            // 映射文件搞起
             TOTAL_MAPPED_FILES.incrementAndGet();
             ok = true;
         } catch (FileNotFoundException e) {
@@ -232,6 +255,7 @@ public class MappedFile extends ReferenceResource {
             log.error("map file " + this.fileName + " Failed. ", e);
             throw e;
         } finally {
+            // 如果没准备直接retrun
             if (!ok && this.fileChannel != null) {
                 this.fileChannel.close();
             }
@@ -251,7 +275,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 附加消息到文件。
+     * 3. 写消息到内存映射区。
      * 实际是插入映射文件buffer
      *
      * @param msg 消息
@@ -259,14 +283,21 @@ public class MappedFile extends ReferenceResource {
      * @return 附加消息结果
      */
     public AppendMessageResult appendMessage(final MessageExtBrokerInner msg, final AppendMessageCallback cb) {
+
         assert msg != null;
         assert cb != null;
 
+        // 当前已经写了多少
         int currentPos = this.wrotePosition.get();
 
+        // 如果还可以写
         if (currentPos < this.fileSize) {
+
+            // 获取写的数据， 如果 writeBuffer 不为空就用writeBuffer  否则用映射的mmap
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
+            // 设置byte 当前的下标
             byteBuffer.position(currentPos);
+            // 回调 commlog 去写入数据
             AppendMessageResult result =
                 cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, msg);
             this.wrotePosition.addAndGet(result.getWroteBytes());
@@ -287,9 +318,10 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * TODO 疑问：调用方是
+     * 在文件开始建立的时候写入，
      */
     public boolean appendMessage(final byte[] data) {
+
         int currentPos = this.wrotePosition.get();
 
         if ((currentPos + data.length) <= this.fileSize) {
@@ -320,9 +352,11 @@ public class MappedFile extends ReferenceResource {
                 try {
                     //We only append data to fileChannel or mappedByteBuffer, never both.
                     if (writeBuffer != null || this.fileChannel.position() != 0) {
+                        // 尚未写入磁盘的数据强制写到磁盘上。出于性能方面的考虑，操作系统会将数据缓存在内存中，
+                        // 所以无法保证写入到FileChannel里的数据一定会即时写到磁盘上。要保证这一点，需要调用force()方法。
                         this.fileChannel.force(false);
                     } else {
-                        this.mappedByteBuffer.force();
+                        this.mappedByteBuffer.force(); // 对缓冲区进行强制写入
                     }
                 } catch (Throwable e) {
                     log.error("Error occurred when force data to disk.", e);
@@ -339,6 +373,8 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
+     * 保证数据已经写到磁盘文件
+     *
      * commit
      * 当{@link #writeBuffer}为null时，直接返回{@link #wrotePosition}
      *
@@ -370,9 +406,11 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * commit实现，将writeBuffer写入fileChannel。
+     *
      * @param commitLeastPages commit最小页数。用不上该参数
      */
     protected void commit0(final int commitLeastPages) {
+
         int writePos = this.wrotePosition.get();
         int lastCommittedPosition = this.committedPosition.get();
 
@@ -394,10 +432,16 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 是否能够flush。满足如下条件任意条件：
+     * 是否能够 flush 。满足如下条件任意条件：
      * 1. 映射文件已经写满
      * 2. flushLeastPages > 0 && 未flush部分超过flushLeastPages
      * 3. flushLeastPages = 0 && 有新写入部分
+     *
+     *  通过上面的实现可以看出，如果通过方法isFull判断文件已经写满了是可以强制写文件的，
+     *  然而就是如果没满而且给commit方法的参数大于0，则会先按OS_PAGE_SIZE(内存页大小，这里是4K每页)大小
+     *  通过“write / OS_PAGE_SIZE”求出已经写入了多少页，同理，然后依然通过内存页大小通过“flush / OS_PAGE_SIZE”求出已经提交了多少页
+     *  ，然后相减得出已经写入了多少页了，这个时候比较commit的参数flushLeastPages，如果大于等于这个值则也可以强制写入文件，
+     *  当然如果给commit的参数给了一个0，则比较写入的大小是否大于提交的大小“write > flush”，也就是只要一写入数据到映射内存就可以强制写到文件中。
      *
      * @param flushLeastPages flush最小分页
      * @return 是否能够写入
@@ -573,6 +617,18 @@ public class MappedFile extends ReferenceResource {
         this.committedPosition.set(pos);
     }
 
+    /**
+     * 写入磁盘
+     * armMappedFile接受2个参数，一个是刷盘的类型，有同步:SYNC_FLUSH和异步:ASYNC_FLUSH，
+     * 当然强制写回磁盘的策略和之前说过的MapedFile的commit是一致的，
+     * 按照 (写入字节 / OS_PAGE_SIZE) - (force后提交字节 / OS_PAGE_SIZE) = 已经写入的页，
+     * 最后比较传入的pages参数“(i / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE) >= pages”来决定
+     * 是否mappedByteBuffer.force()，在这个循环里不断向映射的内存区域写入字节数据，循环结束后，
+     * 在将还没写到磁盘的数据在来一遍force来达到最后flush效果，最后这个mlock是个黑科技了
+     *
+     * @param type 一个是刷盘的类型，有同步:SYNC_FLUSH和异步:ASYNC_FLUSH，
+     * @param pages 按照 (写入字节 / OS_PAGE_SIZE) - (force后提交字节 / OS_PAGE_SIZE) = 已经写入的页，
+     */
     public void warmMappedFile(FlushDiskType type, int pages) {
         long beginTime = System.currentTimeMillis();
         ByteBuffer byteBuffer = this.mappedByteBuffer.slice();
@@ -588,7 +644,7 @@ public class MappedFile extends ReferenceResource {
                 }
             }
 
-            // prevent gc
+            // prevent gc 停止新生代gc
             if (j % 1000 == 0) {
                 log.info("j={}, costTime={}", j, System.currentTimeMillis() - time);
                 time = System.currentTimeMillis();
@@ -609,6 +665,7 @@ public class MappedFile extends ReferenceResource {
         log.info("mapped file warm-up done. mappedFile={}, costTime={}", this.getFileName(),
             System.currentTimeMillis() - beginTime);
 
+        // 黑魔法，直接锁定swap数据，强制一次写入数据
         this.mlock();
     }
 
@@ -636,6 +693,15 @@ public class MappedFile extends ReferenceResource {
         this.firstCreateInQueue = firstCreateInQueue;
     }
 
+    /**
+     * 这个方法是一个Native级别的调用，调用了标准C库的方法，
+     * 首先看mlock方法，mlock方法在标准C中的实现是将锁住指定的内存区域避免被操作系统调到swap空间中，
+     * 而madvise方法则要配合着mmap来说了，一般来说通过mmap建立起的内存文件在刚开始并没有将文件内容映射进来，
+     * 而是只建立一个映射关系，而当你读相对应区域的时候，它第一次还是会去读磁盘，而我们前面说了，读写基本上都只是和
+     * Page Cache打交道，那么当读相对应页没有拿到数据的时候，系统将会产生一个缺页异常，然后去读磁盘中的内容，
+     * 最后写回Page Cache然后再次读取Page Cache然后返回，而madvise的作用是一次性先将一段数据读入到映射内存区域，
+     * 这样就减少了缺页异常的产生
+     */
     public void mlock() {
         final long beginTime = System.currentTimeMillis();
         final long address = ((DirectBuffer) (this.mappedByteBuffer)).address();

@@ -104,7 +104,11 @@ public class CommitLog {
      */
     private ReentrantLock putMessageNormalLock = new ReentrantLock(); // Non fair Sync
 
+    /**
+     * 初始化了！
+     */
     public CommitLog(final DefaultMessageStore defaultMessageStore) {
+
         this.mappedFileQueue = new MappedFileQueue(defaultMessageStore.getMessageStoreConfig().getStorePathCommitLog(),
             defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog(), defaultMessageStore.getAllocateMappedFileService());
         this.defaultMessageStore = defaultMessageStore;
@@ -729,7 +733,7 @@ public class CommitLog {
             }
         }
 
-        // Synchronous write double 如果是同步Master，同步到从节点
+        // Synchronous write double 如果是同步Master，同步到从节点 // TODO 待读：数据同步
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
             if (msg.isWaitStoreMsgOK()) {
@@ -740,10 +744,11 @@ public class CommitLog {
                     }
                     service.putRequest(request);
 
-                    // 唤醒WriteSocketService
                     service.getWaitNotifyObject().wakeupAll();
 
-                    boolean flushOK = request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
+                    boolean flushOK =
+                        // TODO
+                        request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                     if (!flushOK) {
                         log.error("do sync transfer other node, wait return, but failed, topic: " + msg.getTopic() + " tags: "
                             + msg.getTags() + " client address: " + msg.getBornHostString());
@@ -831,14 +836,7 @@ public class CommitLog {
         this.mappedFileQueue.destroy();
     }
 
-    /**
-     * commitLog添加数据
-     * ！该方法主要在Master与Slave同步数据时调用
-     *
-     * @param startOffset 开始物理位置
-     * @param data 数据
-     * @return 是否成功
-     */
+
     public boolean appendData(long startOffset, byte[] data) {
         lockForPutMessage(); //spin...
         try {
@@ -1224,7 +1222,7 @@ public class CommitLog {
      */
     class DefaultAppendMessageCallback implements AppendMessageCallback {
         // File at the end of the minimum fixed length empty
-        private static final int END_FILE_MIN_BLANK_LENGTH = 4 + 4;
+        private static final int END_FILE_MIN_BLANK_LENGTH = 4 + 4;  // 最后补全的文件
         /**
          * 存储在内存中的消息编号字节Buffer
          */
@@ -1252,36 +1250,51 @@ public class CommitLog {
          */
         private final ByteBuffer hostHolder = ByteBuffer.allocate(8);
 
+        /**
+         *
+         * @param size
+         */
         DefaultAppendMessageCallback(final int size) {
             this.msgIdMemory = ByteBuffer.allocate(MessageDecoder.MSG_ID_LENGTH);
             this.msgStoreItemMemory = ByteBuffer.allocate(size + END_FILE_MIN_BLANK_LENGTH);
             this.maxMessageSize = size;
         }
 
+
         public ByteBuffer getMsgStoreItemMemory() {
             return msgStoreItemMemory;
         }
 
+        /**
+         * 在mappedFile  写入时候进行回调的数据
+         *
+         * @param fileFromOffset 相对于整个 broker 的offset
+         * @param byteBuffer 文件字节流缓冲区
+         * @param maxBlank 剩余文件字节空间
+         * @param msgInner  msg写入的数据
+         * @return  AppendMessageResult
+         */
         public AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank, final MessageExtBrokerInner msgInner) {
             // STORETIMESTAMP + STOREHOSTADDRESS + OFFSET <br>
 
             // PHY OFFSET
             long wroteOffset = fileFromOffset + byteBuffer.position();
 
-            // 计算commitLog里的msgId
+            // 重置字节缓冲区， 准备写入
             this.resetByteBuffer(hostHolder, 8);
+            // 计算commitLog里的msgId
             String msgId = MessageDecoder.createMessageId(this.msgIdMemory, msgInner.getStoreHostBytes(hostHolder), wroteOffset);
 
             // Record ConsumeQueue information 获取队列offset
-            keyBuilder.setLength(0);
+            keyBuilder.setLength(0); // 先清空数据
             keyBuilder.append(msgInner.getTopic());
             keyBuilder.append('-');
             keyBuilder.append(msgInner.getQueueId());
             String key = keyBuilder.toString();
-            Long queueOffset = CommitLog.this.topicQueueTable.get(key);
+            Long queueOffset = CommitLog.this.topicQueueTable.get(key);  //  topic消息队列 与 offset 的Map
             if (null == queueOffset) {
                 queueOffset = 0L;
-                CommitLog.this.topicQueueTable.put(key, queueOffset);
+                CommitLog.this.topicQueueTable.put(key, queueOffset); // 设置 这个写文件 key 所对应的长度
             }
 
             // Transaction messages that require special handling // TODO 疑问：用途
@@ -1305,7 +1318,7 @@ public class CommitLog {
             final int propertiesLength = propertiesData == null ? 0 : propertiesData.length;
             if (propertiesLength > Short.MAX_VALUE) {
                 log.warn("putMessage message properties length too long. length={}", propertiesData.length);
-                return new AppendMessageResult(AppendMessageStatus.PROPERTIES_SIZE_EXCEEDED);
+                return new AppendMessageResult(AppendMessageStatus.PROPERTIES_SIZE_EXCEEDED); // 写入的太长
             }
             final byte[] topicData = msgInner.getTopic().getBytes(MessageDecoder.CHARSET_UTF8);
             final int topicLength = topicData.length;
@@ -1320,13 +1333,12 @@ public class CommitLog {
 
             // Determines whether there is sufficient(足够) free space
             if ((msgLen + END_FILE_MIN_BLANK_LENGTH) > maxBlank) {
-                this.resetByteBuffer(this.msgStoreItemMemory, maxBlank);
+                this.resetByteBuffer(this.msgStoreItemMemory, maxBlank); // 准备写buffer
                 // 1 TOTAL_SIZE
                 this.msgStoreItemMemory.putInt(maxBlank);
                 // 2 MAGIC_CODE
                 this.msgStoreItemMemory.putInt(CommitLog.BLANK_MAGIC_CODE);
                 // 3 The remaining space may be any value
-                //
 
                 // Here the length of the specially set maxBlank
                 final long beginTimeMills = CommitLog.this.defaultMessageStore.now();
@@ -1409,6 +1421,7 @@ public class CommitLog {
          * @param limit 长度
          */
         private void resetByteBuffer(final ByteBuffer byteBuffer, final int limit) {
+            // 把limit设为当前position，把position设为0，一般在从Buffer读出数据前调用。
             byteBuffer.flip();
             byteBuffer.limit(limit);
         }

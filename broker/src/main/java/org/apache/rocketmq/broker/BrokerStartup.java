@@ -137,6 +137,7 @@ public class BrokerStartup {
             }
 
             MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), brokerConfig);
+            brokerConfig.setRocketmqHome("/Users/jacksun/Git/0.interesting/rocketmq");
 
             if (null == brokerConfig.getRocketmqHome()) {
                 System.out.printf("Please set the " + MixAll.ROCKETMQ_HOME_ENV

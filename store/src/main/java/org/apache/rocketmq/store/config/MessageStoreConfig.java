@@ -21,6 +21,9 @@ import org.apache.rocketmq.store.ConsumeQueue;
 
 import java.io.File;
 
+/**
+ * 消息存储配置
+ */
 public class MessageStoreConfig {
     //The root directory in which the log data is kept
     @ImportantField
@@ -36,8 +39,11 @@ public class MessageStoreConfig {
         + File.separator + "commitlog";
 
     /**
-     * CommitLog file size,default is 1G
+     * CommitLog file size,default is 1G  （解决缺页异常）
      * 每个commitLog文件大小
+     * 操作系统读写文件基本上只和Page Cache打交道，
+     * 所以中间如果没有命中Page Cache则会产生一个缺页异常然后
+     * 创建一个页再去读磁盘内容最后写回Page Cache最后在读取Page Cache命中然后返回
      */
     @SuppressWarnings("SpellCheckingInspection")
     private int mapedFileSizeCommitLog = 1024 * 1024 * 1024;
