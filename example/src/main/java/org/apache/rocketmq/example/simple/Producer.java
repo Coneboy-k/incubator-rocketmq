@@ -35,7 +35,7 @@ public class Producer {
         for (int i = 0; i <1; i++)
             try {
 
-                String  msgTmp = "hello" + i;
+                String  msgTmp = "hello1111111111111111111111111100000000000000000000000000000000000000000000000000000000000000000000000000" + i;
 
                 Message msg = new Message("TopicTest222222222",
                         "Tag3",

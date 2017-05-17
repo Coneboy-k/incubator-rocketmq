@@ -254,7 +254,7 @@ public class BrokerController {
                 @Override
                 public void run() {
                     try {
-                        BrokerController.this.consumerOffsetManager.persist();
+                        BrokerController.this.consumerOffsetManager.persist(); // 消费情况打印
                     } catch (Throwable e) {
                         log.error("schedule persist consumerOffset error.", e);
                     }

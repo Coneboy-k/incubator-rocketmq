@@ -28,20 +28,20 @@ import org.apache.rocketmq.remoting.common.RemotingHelper;
 public class AsyncProducer {
     public static void main(String[] args) throws MQClientException, InterruptedException, UnsupportedEncodingException {
 
-        DefaultMQProducer producer = new DefaultMQProducer("Jodie_Daily_test");
+        DefaultMQProducer producer = new DefaultMQProducer("KK_Daily_test");
 
         producer.setNamesrvAddr("127.0.0.1:9876");
         producer.setInstanceName("Producer");
 
         producer.start();
-        producer.setRetryTimesWhenSendAsyncFailed(0);
+        producer.setRetryTimesWhenSendAsyncFailed(3);
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10000000; i++) {
             try {
                 final int index = i;
-                String msgTmp = "hello" + i;
+                String msgTmp = "hello22222222222222222" + i;
 
-                Message msg = new Message("Jodie_topic_1023",
+                Message msg = new Message("TopicTest222222222",
                         "TagA",
                         "OrderID188",
                         msgTmp.getBytes(RemotingHelper.DEFAULT_CHARSET));
@@ -66,7 +66,7 @@ public class AsyncProducer {
 
         while(true){
             try {
-                Thread.sleep(100);
+                Thread.sleep(10000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

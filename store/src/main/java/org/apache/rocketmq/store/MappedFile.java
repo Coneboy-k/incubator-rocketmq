@@ -115,8 +115,9 @@ public class MappedFile extends ReferenceResource {
      * 文件
      */
     private File file;
+
     /**
-     * 文件映射Buffer
+     * 映射的内存对象
      */
     private MappedByteBuffer mappedByteBuffer;
     /**
@@ -124,12 +125,13 @@ public class MappedFile extends ReferenceResource {
      */
     private volatile long storeTimestamp = 0;
     /**
-     * 是否最先创建在队列
+     * 是否最先创建在队列，   可以理解为填充前置空白占位
      * {@link MappedFileQueue#getLastMappedFile(long, boolean)}
      */
     private boolean firstCreateInQueue = false;
 
     public MappedFile() {
+        log.info("MappedFile init");
     }
 
     public MappedFile(final String fileName, final int fileSize) throws IOException {
@@ -318,7 +320,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 在文件开始建立的时候写入，
+     * 写入文件， 目前用到的是 consumequeue 写入的
      */
     public boolean appendMessage(final byte[] data) {
 
@@ -528,7 +530,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 根据 pos 获取 映射Buffer
+     * 根据 pos 获取 映射Buffer，用途是保存数据到commentqueue 里面，进行逻辑保存
      *
      * @see #getReadPosition()
      * @param pos 当前 Buffer 的 pos

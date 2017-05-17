@@ -245,7 +245,7 @@ public class MappedFileQueue {
             String nextNextFilePath = this.storePath + File.separator
                     + UtilAll.offset2FileName(createOffset + this.mappedFileSize);
             MappedFile mappedFile = null;
-
+            // 如果不存在的文件直接创建
             if (this.allocateMappedFileService != null) {
                 mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
                         nextNextFilePath, this.mappedFileSize);

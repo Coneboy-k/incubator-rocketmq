@@ -33,7 +33,7 @@ public class MessageExt extends Message {
 
     private int storeSize;
     /**
-     * 队列offset
+     * 队列offset （topic-queueId对应的队列数目）
      */
     private long queueOffset;
     private int sysFlag;

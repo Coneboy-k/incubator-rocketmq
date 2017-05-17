@@ -25,7 +25,9 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 /**
- * 消费队列
+ * 逻辑队列
+ * 该结构对应于消费者逻辑队列，为什么要将一个topic抽象出很多的queue呢？
+ * 这样的话，对集群模式更有好处，可以使多个消费者共同消费，而不用上锁；
  */
 public class ConsumeQueue {
 
@@ -86,6 +88,9 @@ public class ConsumeQueue {
         this.byteBufferIndex = ByteBuffer.allocate(CQ_STORE_UNIT_SIZE);
     }
 
+    /**
+     * 装载
+     */
     public boolean load() {
         boolean result = this.mappedFileQueue.load();
         log.info("load consume queue " + this.topic + "-" + this.queueId + " " + (result ? "OK" : "Failed"));
@@ -354,7 +359,7 @@ public class ConsumeQueue {
     }
 
     /**
-     * 添加位置信息封装
+     * 添加消息 逻辑位置 信息
      *
      * @param offset commitLog存储位置
      * @param size 消息长度
@@ -415,7 +420,7 @@ public class ConsumeQueue {
         this.byteBufferIndex.putLong(tagsCode);
         // 计算consumeQueue存储位置，并获得对应的MappedFile
         final long expectLogicOffset = cqOffset * CQ_STORE_UNIT_SIZE;
-        MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile(expectLogicOffset);
+        MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile(expectLogicOffset); //  获取offset 对应的 comitlog
         if (mappedFile != null) {
             // 当是ConsumeQueue第一个MappedFile && 队列位置非第一个 && MappedFile未写入内容，则填充前置空白占位
             if (mappedFile.isFirstCreateInQueue() && cqOffset != 0 && mappedFile.getWrotePosition() == 0) { // TODO 疑问：为啥这个操作。目前能够想象到的是，一些老的消息很久没发送，突然发送，这个时候刚好满足。

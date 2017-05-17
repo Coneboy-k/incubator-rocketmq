@@ -37,7 +37,9 @@ import java.util.concurrent.TimeUnit;
 public class AllocateMappedFileService extends ServiceThread {
 
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-    private static int waitTimeOut = 1000 * 5;
+
+    // 超时时间
+    private static int waitTimeOut = 1000000 * 5;
 
     // 线程安全的hashMap
     private ConcurrentHashMap<String, AllocateRequest> requestTable =
@@ -58,7 +60,7 @@ public class AllocateMappedFileService extends ServiceThread {
         this.messageStore = messageStore;
     }
 
-    //
+    // 创建mappedFile
     public MappedFile putRequestAndReturnMappedFile(String nextFilePath, String nextNextFilePath, int fileSize) {
         int canSubmitRequests = 2;
         if (this.messageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
@@ -67,7 +69,7 @@ public class AllocateMappedFileService extends ServiceThread {
                 canSubmitRequests = this.messageStore.getTransientStorePool().remainBufferNumbs() - this.requestQueue.size();
             }
         }
-
+        // 创建一个内部类来进行创建
         AllocateRequest nextReq = new AllocateRequest(nextFilePath, fileSize);
         boolean nextPutOK = this.requestTable.putIfAbsent(nextFilePath, nextReq) == null;
 
@@ -108,6 +110,7 @@ public class AllocateMappedFileService extends ServiceThread {
         AllocateRequest result = this.requestTable.get(nextFilePath);
         try {
             if (result != null) {
+                // 等待 allocateService 中的 mmapOperation()  把文件mmapOperation 创建好然后返回数据
                 boolean waitOK = result.getCountDownLatch().await(waitTimeOut, TimeUnit.MILLISECONDS);
                 if (!waitOK) {
                     log.warn("create mmap timeout " + result.getFilePath() + " " + result.getFileSize());
@@ -233,6 +236,7 @@ public class AllocateMappedFileService extends ServiceThread {
             }
         } finally {
             if (req != null && isSuccess)
+                // 要通知创建 MappedFile  创建结果， 防止卡死
                 req.getCountDownLatch().countDown();
         }
         return true;
@@ -245,7 +249,7 @@ public class AllocateMappedFileService extends ServiceThread {
         // Full file path
         private String filePath;
         private int fileSize;
-        private CountDownLatch countDownLatch = new CountDownLatch(1);
+        private CountDownLatch countDownLatch = new CountDownLatch(1); // 同步工具类，它允许一个或多个线程一直等待，直到其他线程的操作执行完后再执行。
         private volatile MappedFile mappedFile = null;
 
         public AllocateRequest(String filePath, int fileSize) {

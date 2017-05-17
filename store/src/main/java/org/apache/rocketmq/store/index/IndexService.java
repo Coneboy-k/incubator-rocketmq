@@ -35,7 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 用于创建索引文件集合 由一系列的IndexFile文件组成
+ * 用于创建索引文件集合 由一系列的IndexFile文件组成，索引服务
  */
 public class IndexService {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -202,9 +202,9 @@ public class IndexService {
     private String buildKey(final String topic, final String key) {
         return topic + "#" + key;
     }
-
+    // 建立索引
     public void buildIndex(DispatchRequest req) {
-        IndexFile indexFile = retryGetAndCreateIndexFile();
+        IndexFile indexFile = retryGetAndCreateIndexFile(); // 获取一个索引文件
         if (indexFile != null) {
             long endPhyOffset = indexFile.getEndPhyOffset();
             DispatchRequest msg = req;
@@ -267,7 +267,7 @@ public class IndexService {
 
     /**
      * Retries to get or create index file.
-     *
+     * 获取一个indexFile 如果没有的话直接创建一个
      * @return {@link IndexFile} or null on failure.
      */
     public IndexFile retryGetAndCreateIndexFile() {

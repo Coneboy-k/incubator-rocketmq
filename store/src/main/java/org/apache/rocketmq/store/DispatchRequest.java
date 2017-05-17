@@ -16,6 +16,10 @@
  */
 package org.apache.rocketmq.store;
 
+/**
+ * 分发数据结构类型
+ * 数据写入CommitLog之后，会创建DispatchRequest，调用defaultMessageStore.putDispatchRequest
+ */
 public class DispatchRequest {
     private final String topic;
     private final int queueId;

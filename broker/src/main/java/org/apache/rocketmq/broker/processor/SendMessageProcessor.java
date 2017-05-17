@@ -379,7 +379,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             }
         }
 
-        // 添加消息--我理解的是保存消息
+        // 添加消息--我理解的是保存消息 这里仅为保存commitlog 写入真实的文件
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         if (putMessageResult != null) {
             boolean sendOK = false;

@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.apache.rocketmq.store.config.BrokerRole.SLAVE;
 
 /**
- * 这个类实现了RMQ对消息的存储，现在的版本基本上可是说是必须的
+ * 这个类实现了RMQ对消息的存储
  */
 public class DefaultMessageStore implements MessageStore {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -156,7 +156,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * @throws IOException
+     *  启动存储服务
      */
     public boolean load() {
         boolean result = true;
@@ -165,6 +165,7 @@ public class DefaultMessageStore implements MessageStore {
             boolean lastExitOK = !this.isTempFileExist();
             log.info("last shutdown {}", lastExitOK ? "normally" : "abnormally");
 
+            // 启动计划任务
             if (null != scheduleMessageService) {
                 result = result && this.scheduleMessageService.load();
             }
@@ -332,7 +333,7 @@ public class DefaultMessageStore implements MessageStore {
         if (eclipseTime > 500) {
             log.warn("putMessage not in lock eclipse time(ms)={}, bodyLength={}", eclipseTime, msg.getBody().length);
         }
-        this.storeStatsService.setPutMessageEntireTimeMax(eclipseTime);
+        this.storeStatsService.setPutMessageEntireTimeMax(eclipseTime);// 统计写入的时间
 
         if (null == result || !result.isOk()) {
             this.storeStatsService.getPutMessageFailedTimes().incrementAndGet();
@@ -1719,6 +1720,9 @@ public class DefaultMessageStore implements MessageStore {
             return this.reputFromOffset < DefaultMessageStore.this.commitLog.getMaxOffset();
         }
 
+        /**
+         * 重放数据，是进行重写数据
+         */
         private void doReput() {
             for (boolean doNext = true; this.isCommitLogAvailable() && doNext; ) {
 

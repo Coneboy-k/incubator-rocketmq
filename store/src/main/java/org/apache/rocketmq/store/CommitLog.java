@@ -109,6 +109,8 @@ public class CommitLog {
      */
     public CommitLog(final DefaultMessageStore defaultMessageStore) {
 
+        log.info("初始化 mappedFileQueue");
+        // 初始化 mappedFileQueue
         this.mappedFileQueue = new MappedFileQueue(defaultMessageStore.getMessageStoreConfig().getStorePathCommitLog(),
                 defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog(),
                 defaultMessageStore.getAllocateMappedFileService());
@@ -272,7 +274,7 @@ public class CommitLog {
      *
      * @return 0 Come the end of the file // >0 Normal messages // -1 Message checksum failure
      */
-    // TODO 待读
+    // 验证消息类型 并返回消息长度
     public DispatchRequest checkMessageAndReturnSize(ByteBuffer byteBuffer, final boolean checkCRC, final boolean readBody) {
         try {
             // 1 TOTAL SIZE
@@ -941,7 +943,7 @@ public class CommitLog {
     }
 
     /**
-     * flush commitLog 线程服务
+     * 刷盘服务  基类；
      */
     abstract class FlushCommitLogService extends ServiceThread {
         protected static final int RETRY_TIMES_OVER = 10;
@@ -1008,7 +1010,7 @@ public class CommitLog {
     }
 
     /**
-     * 实时 flush commitLog 线程服务
+     * 异步刷盘；调用mappedByteBuffer.force()进行刷盘操作
      */
     class FlushRealTimeService extends FlushCommitLogService {
         /**
@@ -1023,7 +1025,7 @@ public class CommitLog {
 
         public void run() {
             CommitLog.log.info(this.getServiceName() + " service started");
-
+            // 一直在刷数据
             while (!this.isStopped()) {
                 boolean flushCommitLogTimed = CommitLog.this.defaultMessageStore.getMessageStoreConfig().isFlushCommitLogTimed();
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushIntervalCommitLog();
@@ -1099,7 +1101,7 @@ public class CommitLog {
     }
 
     /**
-     * GroupCommit Service
+     * 同步刷盘；每次写入消息时，调用swapRequests进行数据交换，然后将所有的请求进行刷盘
      */
     class GroupCommitService extends FlushCommitLogService {
         /**
@@ -1219,7 +1221,7 @@ public class CommitLog {
     }
 
     /**
-     * 写入消息到Buffer默认实现
+     * 写入消息到Buffer默认实现 ，  内部类
      */
     class DefaultAppendMessageCallback implements AppendMessageCallback {
         // File at the end of the minimum fixed length empty
@@ -1406,7 +1408,7 @@ public class CommitLog {
                     break;
                 case MessageSysFlag.TRANSACTION_NOT_TYPE:
                 case MessageSysFlag.TRANSACTION_COMMIT_TYPE:
-                    // The next update ConsumeQueue information 更新队列的offset
+                    // The next update ConsumeQueue information 更新队列的offset 是加1  逻辑储存状态
                     CommitLog.this.topicQueueTable.put(key, ++queueOffset);
                     break;
                 default:
