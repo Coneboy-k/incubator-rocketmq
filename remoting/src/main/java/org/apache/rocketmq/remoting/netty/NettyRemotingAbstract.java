@@ -78,6 +78,7 @@ public abstract class NettyRemotingAbstract {
         final RemotingCommand cmd = msg;
         if (cmd != null) {
             switch (cmd.getType()) {
+                // 请求的命令
                 case REQUEST_COMMAND:
                     processRequestCommand(ctx, cmd);
                     break;
@@ -90,6 +91,9 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /**
+     * 处理请求参数
+     */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;

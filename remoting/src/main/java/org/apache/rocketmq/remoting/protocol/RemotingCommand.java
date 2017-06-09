@@ -403,7 +403,7 @@ public class RemotingCommand {
 
 
     public ByteBuffer encodeHeader(final int bodyLength) {
-        // 1> header length size
+        // 1> header length size  包头总长度
         int length = 4;
 
         // 2> header data length
