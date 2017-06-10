@@ -24,6 +24,12 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 设定好的  基本不变的pool数据
+ *
+ *
+ *
+ */
 public class BrokerFixedThreadPoolExecutor extends ThreadPoolExecutor {
     public BrokerFixedThreadPoolExecutor(final int corePoolSize, final int maximumPoolSize, final long keepAliveTime, final TimeUnit unit,
         final BlockingQueue<Runnable> workQueue) {

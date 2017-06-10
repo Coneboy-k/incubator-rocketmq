@@ -50,17 +50,23 @@ import org.slf4j.LoggerFactory;
 public abstract class NettyRemotingAbstract {
     private static final Logger PLOG = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
 
+    //单向RPC信号量，控制线程个数
     protected final Semaphore semaphoreOneway;
-
+    //异步RPC信号量，控制线程个数
     protected final Semaphore semaphoreAsync;
 
+    //responseTable，存放异步请求的ResponseFuture
     protected final ConcurrentHashMap<Integer /* opaque */, ResponseFuture> responseTable =
         new ConcurrentHashMap<Integer, ResponseFuture>(256);
 
+    //processorTable,存放注册的processor,key是request Code,对应的是<processor,ExecutorService//线程池（一般使用的是共用的public processor）>
     protected final HashMap<Integer/* request code */, Pair<NettyRequestProcessor, ExecutorService>> processorTable =
         new HashMap<Integer, Pair<NettyRequestProcessor, ExecutorService>>(64);
+
+    //netty事件处理内部类
     protected final NettyEventExecuter nettyEventExecuter = new NettyEventExecuter();
 
+    //默认的事件处理器，处理一些公共的消息
     protected Pair<NettyRequestProcessor, ExecutorService> defaultRequestProcessor;
 
     public NettyRemotingAbstract(final int permitsOneway, final int permitsAsync) {
@@ -68,13 +74,15 @@ public abstract class NettyRemotingAbstract {
         this.semaphoreAsync = new Semaphore(permitsAsync, true);
     }
 
+    //添加ChannelEvent接口
     public abstract ChannelEventListener getChannelEventListener();
 
+    //添加NettyEvent事件
     public void putNettyEvent(final NettyEvent event) {
         this.nettyEventExecuter.putNettyEvent(event);
     }
 
-    public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+     public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
         final RemotingCommand cmd = msg;
         if (cmd != null) {
             switch (cmd.getType()) {
@@ -92,28 +100,36 @@ public abstract class NettyRemotingAbstract {
     }
 
     /**
-     * 处理请求参数
+     * 处理请求参数 ===》执行提交方法，执行流控依赖底层执行器的数据，
      */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
+
+        // 绑定处理器和具体执行的处理器
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
+        // defaultRequestProcessor
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
-        final int opaque = cmd.getOpaque();
+        final int opaque = cmd.getOpaque(); // 这个可以复用
 
         if (pair != null) {
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
+
+                    // 真正的开始处理消息，处理完成以后可以 ctx 来发出具体的回复。
                     try {
                         RPCHook rpcHook = NettyRemotingAbstract.this.getRPCHook();
                         if (rpcHook != null) {
                             rpcHook.doBeforeRequest(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
                         }
-
+                        // ......................................
+                        // 开始真正的处理请求  如果是直接实现的，那我们外面就不用去实现，直接
+                        // ......................................
                         final RemotingCommand response = pair.getObject1().processRequest(ctx, cmd);
                         if (rpcHook != null) {
                             rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
                         }
 
+                        // 异步处理
                         if (!cmd.isOnewayRPC()) {
                             if (response != null) {
                                 response.setOpaque(opaque);
@@ -126,7 +142,7 @@ public abstract class NettyRemotingAbstract {
                                     PLOG.error(response.toString());
                                 }
                             } else {
-
+                                // 同步处理的就不用处理
                             }
                         }
                     } catch (Throwable e) {
@@ -154,30 +170,39 @@ public abstract class NettyRemotingAbstract {
                 return;
             }
 
+            // 1.开始提交数据
             try {
+                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                // 执行具体的  Request的Task
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
                 pair.getObject2().submit(requestTask);
             } catch (RejectedExecutionException e) {
+
                 if ((System.currentTimeMillis() % 10000) == 0) {
                     PLOG.warn(RemotingHelper.parseChannelRemoteAddr(ctx.channel()) //
-                        + ", too many requests and system thread pool busy, RejectedExecutionException " //
-                        + pair.getObject2().toString() //
-                        + " request code: " + cmd.getCode());
+                            + ", too many requests and system thread pool busy, RejectedExecutionException " //
+                            + pair.getObject2().toString() //
+                            + " request code: " + cmd.getCode());
                 }
 
+                // 如果是异步调用，这里直接需要返回其他的冲刷数据
                 if (!cmd.isOnewayRPC()) {
+                    // 进行流控。。。。  是还没直接执行的
                     final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY,
                         "[OVERLOAD]system busy, start flow control for a while");
                     response.setOpaque(opaque);
+                    // 这块直接给 下一个outBound 直接发送了，
                     ctx.writeAndFlush(response);
                 }
             }
         } else {
+
+            // 不支持的请求类型
             String error = " request type " + cmd.getCode() + " not supported";
             final RemotingCommand response =
                 RemotingCommand.createResponseCommand(RemotingSysResponseCode.REQUEST_CODE_NOT_SUPPORTED, error);
             response.setOpaque(opaque);
-            ctx.writeAndFlush(response);
+            ctx.writeAndFlush(response); // 这块直接传给下一个pipe
             PLOG.error(RemotingHelper.parseChannelRemoteAddr(ctx.channel()) + error);
         }
     }
@@ -393,7 +418,9 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    // netty事件执行器
     class NettyEventExecuter extends ServiceThread {
+
         private final LinkedBlockingQueue<NettyEvent> eventQueue = new LinkedBlockingQueue<NettyEvent>();
         private final int maxSize = 10000;
 

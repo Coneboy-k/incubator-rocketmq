@@ -50,6 +50,7 @@ public class NettyDecoder extends LengthFieldBasedFrameDecoder {
 
             return RemotingCommand.decode(byteBuffer);
         } catch (Exception e) {
+            // 解析错误直接关闭链接？
             log.error("decode exception, " + RemotingHelper.parseChannelRemoteAddr(ctx.channel()), e);
             RemotingUtil.closeChannel(ctx.channel());
         } finally {

@@ -36,7 +36,7 @@ public class AsyncProducer {
         producer.start();
         producer.setRetryTimesWhenSendAsyncFailed(3);
 
-        for (int i = 0; i < 10000000; i++) {
+        for (int i = 0; i < 1; i++) {
             try {
                 final int index = i;
                 String msgTmp = "hello22222222222222222" + i;

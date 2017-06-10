@@ -55,6 +55,9 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * netty 服务端的server
+ */
 public class NettyRemotingServer extends NettyRemotingAbstract implements RemotingServer {
     private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
     private final ServerBootstrap serverBootstrap;
@@ -230,6 +233,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         this.rpcHook = rpcHook;
     }
 
+    /**
+     * 注册处理器
+     */
     @Override
     public void registerProcessor(int requestCode, NettyRequestProcessor processor, ExecutorService executor) {
         ExecutorService executorThis = executor;
@@ -289,41 +295,51 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         return this.publicExecutor;
     }
 
+    /**
+     * 简单的处理器,没有过于复杂的数据，前置的处理器已经处理好数据了
+     */
     class NettyServerHandler extends SimpleChannelInboundHandler<RemotingCommand> {
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+            // 不用显示释放具体的数据
             processMessageReceived(ctx, msg);
         }
     }
 
+    /**
+     * netty 链接的处理，他处于倒数第二个个pipeline 上面
+     */
     class NettyConnetManageHandler extends ChannelDuplexHandler {
-        @Override
+
+
+        @Override // 当Channel已经注册到它的EventLoop并且能够处理I/O时被调用
         public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
             final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
             log.info("NETTY SERVER PIPELINE: channelRegistered {}", remoteAddress);
             super.channelRegistered(ctx);
         }
 
-        @Override
+        @Override // 当Channel从它的EventLoop注销并且无法处理任何I/O时被调用
         public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
             final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
             log.info("NETTY SERVER PIPELINE: channelUnregistered, the channel[{}]", remoteAddress);
             super.channelUnregistered(ctx);
         }
 
-        @Override
+        @Override //当Channel处于活动状态时被调用；Channel已经连接/绑定并且已经就绪
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
             log.info("NETTY SERVER PIPELINE: channelActive, the channel[{}]", remoteAddress);
             super.channelActive(ctx);
 
+            // 派发netty的事件 ==》 Channel处于活动状态（已经连接到它的远程节点）。它现在可以接收和发送数据了
             if (NettyRemotingServer.this.channelEventListener != null) {
                 NettyRemotingServer.this.putNettyEvent(new NettyEvent(NettyEventType.CONNECT, remoteAddress.toString(), ctx.channel()));
             }
         }
 
-        @Override
+        @Override // 当Channel离开活动状态并且不再连接它的远程节点时被调用
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
             log.info("NETTY SERVER PIPELINE: channelInactive, the channel[{}]", remoteAddress);
@@ -334,13 +350,17 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             }
         }
 
-        @Override
+
+        @Override // 调用ChannelPipeline中下一个ChannelInboundHandler的userEventTriggered(ChannelHandlerContext, Object)方法
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+            // 超时事件触发  --》是idle事件触发了
             if (evt instanceof IdleStateEvent) {
                 IdleStateEvent evnet = (IdleStateEvent) evt;
                 if (evnet.state().equals(IdleState.ALL_IDLE)) {
                     final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
                     log.warn("NETTY SERVER PIPELINE: IDLE exception [{}]", remoteAddress);
+
+                    // 关闭channel
                     RemotingUtil.closeChannel(ctx.channel());
                     if (NettyRemotingServer.this.channelEventListener != null) {
                         NettyRemotingServer.this
@@ -349,6 +369,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 }
             }
 
+            // 当ChannelnboundHandler.fireUserEventTriggered() ==> 方法被调用时被调用，因为一个POJO被传经了 ChannelPipeline
             ctx.fireUserEventTriggered(evt);
         }
 
@@ -362,6 +383,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 NettyRemotingServer.this.putNettyEvent(new NettyEvent(NettyEventType.EXCEPTION, remoteAddress.toString(), ctx.channel()));
             }
 
+            // 关闭channel
             RemotingUtil.closeChannel(ctx.channel());
         }
     }
